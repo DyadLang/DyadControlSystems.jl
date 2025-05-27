@@ -1,0 +1,9 @@
+[deps]
+ControlSystemsBase = "aaaaaaaa-a6ca-5380-bf3e-84a91bcd477e"
+DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
+HardwareAbstractions = "9ac91abb-62f4-42c0-88e8-83732e93d543"
+DyadControlSystems = "42a6d8df-d987-4b8a-9d23-46c784d00c33"
+NearestNeighbors = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
+QuanserInterface = "d7748c0a-89fb-413b-a9f0-29aba34b281f"
+RobustAndOptimalControl = "21fd56a4-db03-40ee-82ee-a87907bee541"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"

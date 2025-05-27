@@ -1,0 +1,37 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  workflow_dispatch:
+
+env:
+  JULIA_PKG_SERVER: https://internal.juliahub.com/
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: [self-hosted-juliasim-docs]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        name: Checkout
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: '1'
+      - uses: PumasAI/add-private-registry@main
+        with:
+          juliahub_token_encoded: ${{ secrets.JULIAHUB_TOKEN_ENCODED }}
+          private_registry_name: JuliaSimRegistry
+          private_registry_uuid: 309a7822-a73e-4490-9504-7d1983f27685
+      - name: Install dependencies
+        run: julia --project=docs/ -e 'using Pkg; Pkg.instantiate()'
+      - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # For authentication with GitHub Actions token
+        run: julia --project=docs/ docs/make.jl

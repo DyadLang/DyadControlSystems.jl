@@ -1,0 +1,161 @@
+{
+    "title": "PID Autotuning Analysis",
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Analysis Type",
+            "default": "PIDAutotuningAnalysis"
+        },
+        "model": {
+            "type": "object",
+            "description": "Model to simulate",
+            "dyad:type": "component"
+        },
+        "measurement": {
+            "type": "string",
+            "description": "The measured output of P that is used for feedback"
+        },
+        "control_input": {
+            "type": "string",
+            "description": "The control input of the plant"
+        },
+        "step_input": {
+            "type": "string",
+            "description": "The input to the system when optimizing the step response"
+        },
+        "step_output": {
+            "type": "string",
+            "description": "The output to the system when optimizing the step response"
+        },
+        "ref": {
+            "type": "number",
+            "description": "The reference signal for the response optimization",
+            "default": 0.0
+        },
+        "Ts": {
+            "type": "number",
+            "description": "Sampling time",
+            "minimum": 1e-32
+        },
+        "duration": {
+            "type": "number",
+            "description": "Duration of step-response simulation (Final time)",
+            "minimum": 1e-32
+        },
+        "Ms": {
+            "type": "number",
+            "description": "Maximum allowed peak in the sensitivity function",
+            "minimum": 1
+        },
+        "Mt": {
+            "type": "number",
+            "description": "Maximum allowed peak in the complementary sensitivity function",
+            "minimum": 1
+        },
+        "Mks": {
+            "type": "number",
+            "description": "Maximum allowed peak in the noise sensitivity function",
+            "minimum": 1e-32
+        },
+        "disc": {
+            "type": "string",
+            "default": "tustin",
+            "description": "Discretization method"
+        },
+        "kp_lb": {
+            "type": "number",
+            "default": 0.0,
+            "description": "Lower bound for the proportional gain (kp) in the optimization."
+        },
+        "ki_lb": {
+            "type": "number",
+            "default": 0.0,
+            "description": "Lower bound for the integral gain (ki) in the optimization."
+        },
+        "kd_lb": {
+            "type": "number",
+            "default": 0.0,
+            "description": "Lower bound for the derivative gain (kd) in the optimization."
+        },
+        "Tf_lb": {
+            "type": "number",
+            "default": 1e-16,
+            "description": "Lower bound for the filter time constant (Tf) in the optimization."
+        },
+        "kp_ub": {
+            "type": "number",
+            "default": 1e300,
+            "description": "Upper bound for the proportional gain (kp) in the optimization."
+        },
+        "ki_ub": {
+            "type": "number",
+            "default": 1e300,
+            "description": "Upper bound for the integral gain (ki) in the optimization."
+        },
+        "kd_ub": {
+            "type": "number",
+            "default": 1e300,
+            "description": "Upper bound for the derivative gain (kd) in the optimization."
+        },
+        "Tf_ub": {
+            "type": "number",
+            "default": 1e300,
+            "description": "Upper bound for the filter time constant (Tf) in the optimization."
+        },
+        "kp_guess": {
+            "type": "number",
+            "default": -1,
+            "description": "Initial guess for the proportional gain (kp) in the optimization."
+        },
+        "ki_guess": {
+            "type": "number",
+            "default": -1,
+            "description": "Initial guess for the integral gain (ki) in the optimization."
+        },
+        "kd_guess": {
+            "type": "number",
+            "default": -1,
+            "description": "Initial guess for the derivative gain (kd) in the optimization."
+        },
+        "Tf_guess": {
+            "type": "number",
+            "default": -1,
+            "description": "Initial guess for the filter time constant (Tf) in the optimization."
+        },
+        "timeweight": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, time-weighted error is used as the cost function."
+        },
+        "filter_order": {
+            "type": "number",
+            "default": 2,
+            "description": "The order of the filter. Options are {1, 2}."
+        },
+        "optimize_d": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, the filter damping ratio is optimized."
+        }
+        ,
+        "wl": {
+            "type": "number",
+            "default": -1,
+            "description": "Lower bound for the frequency vector (w) in the optimization. Use -1 for automatic selection."
+        },
+        "wu": {
+            "type": "number",
+            "default": -1,
+            "description": "Upper bound for the frequency vector (w) in the optimization. Use -1 for automatic selection."
+        },
+        "num_frequencies": {
+            "type": "integer",
+            "default": 200,
+            "description": "Number of frequencies to include in w."
+        }
+    }
+}
+
+
+
