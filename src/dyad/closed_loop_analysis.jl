@@ -102,8 +102,8 @@ function setup_prob(spec::ClosedLoopAnalysisSpec)
     # linearize
     # We break any existing feedback from the plant output with loop_openings = [measurement]
     loop_openings = unique([spec.loop_openings; inputs])
-    P = named_ss(spec.model, inputs, outputs; loop_openings)
-    C = named_ss(spec.model, outputs, inputs; loop_openings)
+    P = named_ss(spec.model, inputs, outputs; loop_openings, warn_empty_op=false)
+    C = named_ss(spec.model, outputs, inputs; loop_openings, warn_empty_op=false)
 
     if spec.wl < 0 || spec.wu < 0
         w = ControlSystemsBase._default_freq_vector(P, Val{:bode}())
@@ -131,6 +131,15 @@ struct ClosedLoopAnalysisSolution{SP <: ClosedLoopAnalysisSpec} <: AbstractAnaly
     spec::SP
     P
     C
+end
+
+function Base.show(io::IO, m::MIME"text/plain", sol::ClosedLoopAnalysisSolution)
+    spec = sol.spec
+    dm = diskmargin((spec.pos_feedback ? -1 : 1)*sol.P*sol.C)
+    println(io, "ClosedLoopAnalysisSolution")
+    println(io, "Phase margin (disk based): $(few(dm.phasemargin))°")
+    println(io, "Gain margin (disk based): $(few.(dm.gainmargin))")
+    return nothing
 end
 
 function DyadInterface.run_analysis(spec::ClosedLoopAnalysisSpec)

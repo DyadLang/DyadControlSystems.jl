@@ -1,0 +1,12 @@
+partial analysis ClosedLoopSensitivityAnalysis
+    extends Analysis
+    model::Dyad.EmptyComponent = Dyad.EmptyComponent()
+    # The analysis point(s) where sensitivity is computed
+    parameter analysis_points::String[1]
+    # Names of loop openings to break feedback if present (default empty vector)
+    parameter loop_openings::String[1] = []
+    # The lower frequency bound for the analysis (set to -1 for automatic selection)
+    parameter wl::Real = -1
+    # The upper frequency bound for the analysis (set to -1 for automatic selection)
+    parameter wu::Real = -1
+end

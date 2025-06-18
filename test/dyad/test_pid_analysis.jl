@@ -98,6 +98,7 @@ asol = JSC.run_analysis(spec)
 Splot = JSC.artifacts(asol, :SensitivityFunctions)
 noise_plot = JSC.artifacts(asol, :NoiseSensitivityAndController)
 response_plot = JSC.artifacts(asol, :OptimizedResponse)
+u_plot = JSC.artifacts(asol, :ControlSignalResponse)
 nyquist_plot = JSC.artifacts(asol, :NyquistPlot)
 optimized_parameters_dataframe = JSC.artifacts(asol, :OptimizedParameters)
 

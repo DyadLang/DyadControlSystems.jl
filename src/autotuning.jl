@@ -574,7 +574,7 @@ IpoptSolver(;
     acceptable_constr_viol_tol  = 0.02,
     exact_hessian               = false,
     kwargs...
-) = MPC.IpoptSolver(; verbose,acceptable_tol,max_cpu_time,max_wall_time,max_iter,constr_viol_tol,acceptable_constr_viol_tol,exact_hessian,kwargs...)
+) = MPC.IpoptSolver(; verbose,tol,acceptable_tol,max_cpu_time,max_wall_time,max_iter,constr_viol_tol,acceptable_constr_viol_tol,exact_hessian,kwargs...)
 
 
 """

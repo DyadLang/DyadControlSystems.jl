@@ -24,11 +24,11 @@ jobs:
       - uses: julia-actions/setup-julia@latest
         with:
           version: '1'
-      - uses: PumasAI/add-private-registry@main
+      - name: "Set up private JuliaHub registries"
+        uses: "JuliaComputing/set-up-private-juliahub-registries@v1.2.1"
         with:
-          juliahub_token_encoded: ${{ secrets.JULIAHUB_TOKEN_ENCODED }}
-          private_registry_name: JuliaSimRegistry
-          private_registry_uuid: 309a7822-a73e-4490-9504-7d1983f27685
+          encoded-juliahub-token: "${{ secrets.JULIAHUB_TOKEN_ENCODED }}"
+          ssh-key: "${{ secrets.JULIASIM_REGISTRY_SSH_KEY }}"
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.instantiate()'
       - name: Build and deploy

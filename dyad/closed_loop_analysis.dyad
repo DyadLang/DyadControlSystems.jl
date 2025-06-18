@@ -1,0 +1,18 @@
+partial analysis ClosedLoopAnalysis
+    extends Analysis
+    model::Dyad.EmptyComponent = Dyad.EmptyComponent()
+    # The analysis point representing the connection that feeds plant measurement to the controller
+    parameter measurement::String[1]
+    # The analysis point representing the connection that feeds controller output to the plant
+    parameter control_input::String[1]
+    # The lower limit of the frequency range for the analysis. Set to -1 for automatic determination.
+    parameter wl::Real = -1
+    # The upper limit of the frequency range for the analysis. Set to -1 for automatic determination.
+    parameter wu::Real = -1
+    # The number of frequencies to use in the analysis.
+    parameter num_frequencies::Integer = 300
+    # Whether or not to use positive feedback in the analysis. This defaults to true since the feedback loop typically includes negation of the plant output.
+    parameter pos_feedback::Boolean = true
+    # Time duration for the step-response analysis. If set to -1, the duration will be automatically determined based on the system dynamics.
+    parameter duration::Real = -1.0
+end

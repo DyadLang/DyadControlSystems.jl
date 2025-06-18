@@ -67,7 +67,7 @@ nyq = DyadControlSystems.artifacts(asol, :NyquistPlot)
 rga = DyadControlSystems.artifacts(asol, :RGAPlot)
 @test rga !== nothing
 
-plot(fig_bode, fig_margin, fig_step, fig_step_info, rl, pz, nyq, size=(1200, 1200))
+plot(fig_bode, fig_margin, fig_step, fig_step_info, rl, pz, nyq, size=(1200, 1200), link=:none)
 
 ##
 

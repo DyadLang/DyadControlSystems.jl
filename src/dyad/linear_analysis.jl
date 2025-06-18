@@ -25,6 +25,7 @@ damping report, and step response.
 - `wu::Real`: Upper frequency bound for Bode plot (optional, default -1 for auto).
 - `num_frequencies::Int`: Number of frequency points (default 3000).
 - `duration::Real`: Duration for the step response plot (default -1 for auto).
+- `loop_openings::Vector{String}`: Names of loop openings to break feedback if present (default empty vector).
 
 # Result visualization
 The analysis artifact displays:
@@ -48,6 +49,7 @@ The analysis artifact displays:
     wu::WU = -1
     num_frequencies::Int = 3000
     duration::DU = -1
+    loop_openings::Vector{String} = String[]
 end
 
 Base.nameof(spec::LinearAnalysisSpec) = spec.name
@@ -68,7 +70,7 @@ function setup_prob(spec::LinearAnalysisSpec)
     outputs = Symbol.(spec.outputs)
 
     # Linearize
-    sys = named_ss(spec.model, inputs, outputs)
+    sys = named_ss(spec.model, inputs, outputs; spec.loop_openings, warn_empty_op=false)
     if spec.wl < 0 || spec.wu < 0
         w = ControlSystemsBase._default_freq_vector(sys, Val{:bode}())
     else
@@ -180,9 +182,9 @@ function DyadInterface.artifacts(sol::LinearAnalysisSolution, name::Symbol)
                 t_const = 1 / (Wn * zeta)
                 t_const < 1e6 ? 10t_const : 100.0 # Guard against integrators (including close calls)
             end
-                
         end
-        res = step(sys, duration)
+        Ts = duration / 1000.0
+        res = step(sys, 0:Ts:duration)
     end
 
 

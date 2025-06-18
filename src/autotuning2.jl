@@ -648,10 +648,9 @@ end
 
 
 """
-    OptimizedPID2(popt; name, kwargs...)
     OptimizedPID2(res::AutoTuningResult2; name, kwargs...)
 
-Takes optimized parameters `popt` or an [`AutoTuningResult2`](@ref) and returns the following system
+Takes optimized parameters `popt` or an [`AutoTuningResult2`](@ref) and returns the following system (`filter_order = 2`)
 ```
           ┌───┐
      ────►│ F ├───────┐ ┌─────┐
@@ -663,17 +662,24 @@ reference └───┘       └►│     │   ctr_output
        │
        └───── measurement
 ```
+or if `filter_order = 1`, the built in filter on the derivative term present in `Blocks.LimPID`` is used. The connectors `reference, measurement, ctr_output` are the same in both cases.
+
 
 # Arguments:
 - `popt`: Obtained by solving an [`AutoTuningProblem2`](@ref)
 - `kwargs`: Are passed to `ModelingToolkitStandardLibrary.Blocks.LimPID`
 """
-function OptimizedPID2(popt::Vector; name, Nd = 10000, kwargs...) # Nd is set to a very high value since we have separate noise filters
+function OptimizedPID2(popt::Vector; name, filter_order = 2, Nd = 10000, kwargs...) # Nd is set to a very high value since we have separate noise filters
     # We set Nd very high by default since we have an explicit filter F.
     kp, ki, kd, Tf = popt
     # (kp + ki/s + kd*s)
     k, Ti, Td = ControlSystemsBase.convert_pidparams_to_standard(kp, ki, kd, :parallel)
     if Tf == 0
+        return Blocks.LimPID(; k, Ti, Td, Nd, name, kwargs...)
+    end
+    if filter_order == 1
+        Nd = Td/Tf
+        # In this case the correct form of the filter is already present in the PID controller
         return Blocks.LimPID(; k, Ti, Td, Nd, name, kwargs...)
     end
 
@@ -701,7 +707,7 @@ function OptimizedPID2(popt::Vector; name, Nd = 10000, kwargs...) # Nd is set to
         t; systems=[filter_r, filter_y, pid, reference, measurement, ctr_output], name)
 end
 
-OptimizedPID2(res::AutoTuningResult2; kwargs...) = OptimizedPID2(res.p; kwargs...)
+OptimizedPID2(res::AutoTuningResult2; kwargs...) = OptimizedPID2(res.p; res.filter_order, kwargs...)
 
 @recipe function plot(res::AutoTuningResult2; stepsize = 1)
     prob = res.prob
@@ -711,13 +717,22 @@ OptimizedPID2(res::AutoTuningResult2; kwargs...) = OptimizedPID2(res.p; kwargs..
 
     Pfb = P[prob.measurement, prob.control_input]
 
+    Pus = res.G[:u_controller_output_C, prob.step_input]
+
     function sim()
         Gd = c2d(res.G[prob.step_output, prob.step_input], Ts, disc)   # Discretize the system
         prob.response_type(Gd.sys, tv) # Simulate the step response
     end
 
+    function sim_u()
+        Gd = c2d(Pus, Ts, disc)   # Discretize the system
+        prob.response_type(Gd.sys, tv) # Simulate the step response
+    end
+
     S, PS, CS, T = ControlSystemsBase.gangoffour(Pfb.sys, C.sys)
-    layout --> 4 # @layout [[a b; c d] e]
+    # layout --> 5
+    layout --> @layout [[a b; c d] e{0.3w}]
+    size --> (800,600)
     plotphase := false
     xguide --> "Frequency [rad/s]"
     legend := :bottomright
@@ -787,15 +802,29 @@ OptimizedPID2(res::AutoTuningResult2; kwargs...) = OptimizedPID2(res.p; kwargs..
     end
     subplot := 3
     # All series are split up into separate @series blocks due to https://github.com/JuliaPlots/Plots.jl/issues/4108
-    for i in eachindex(vcat(prob.step_input)), j in eachindex(vcat(prob.step_output))
+    step1 = sim() |> deepcopy # Deepcopy due to dstep using cached workspaces
+    step2 = sim_u() |> deepcopy
+
+    for i in eachindex(vcat(prob.step_input))
+        for j in eachindex(vcat(prob.step_output))
+            @series begin
+                title --> "Optimized response"
+                xguide := "Time [s]"
+                # link := :none
+                # linecolor --> 1
+                label := "$(vcat(prob.step_input)[i]) → $(vcat(prob.step_output)[j])"
+                step1.t, step1.y[j,:,i]
+            end
+        end
+    end
+
+    subplot := 4
+    for i in eachindex(vcat(prob.step_input))
         @series begin
-            title --> "Optimized response"
+            link := :none
             xguide := "Time [s]"
-            # link := :none
-            step1 = sim() |> deepcopy # Deepcopy due to dstep using cached workspaces
-            # linecolor --> 1
-            label := "$(vcat(prob.step_input)[i]) → $(vcat(prob.step_output)[j])"
-            step1.t, step1.y[j,:,i]
+            label := "$(vcat(prob.step_input)[i]) → u"
+            step2.t, step2.y[i, :]
         end
     end
     cs = -1             # Ms center
@@ -805,7 +834,7 @@ OptimizedPID2(res::AutoTuningResult2; kwargs...) = OptimizedPID2(res.p; kwargs..
     θ = range(0, stop=2π, length=100)
     Sin, Cos = sin.(θ), cos.(θ)
     re, im = nyquist(Pfb*C,w)
-    subplot := 4
+    subplot := 5
     @series begin
         linecolor --> 1
         label := ""
@@ -836,12 +865,13 @@ OptimizedPID2(res::AutoTuningResult2; kwargs...) = OptimizedPID2(res.p; kwargs..
         seriescolor := :red
         markersize := 5
         seriesstyle := :scatter
-        xguide := "Re"
-        yguide := "Im"
+        # xguide := "Re"
+        # yguide := "Im"
+        ratio --> 1
         framestyle := :zerolines
         title --> "Nyquist plot"
         xlims --> (-3, 1)
-        ylims --> (-3, 1)
+        ylims --> (-5, 2)
         [-1], [0]
     end
     nothing

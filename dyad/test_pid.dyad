@@ -1,0 +1,157 @@
+component DCMotor
+  p = Pin()
+  n = Pin()
+  shaft = Spline()
+  housing = Spline()
+  R1 = ElectricalComponents.Resistor(R=R)
+  L1 = ElectricalComponents.Inductor(L=L)
+  emf = ElectricalComponents.RotationalEMF(k=k)
+  inertia = RotationalComponents.Inertia(J=J)
+  friction = RotationalComponents.Damper(d=f)
+  # Armature resistance
+  parameter R::Resistance = 0.5
+  # Armature inductance
+  parameter L::Inductance = 4.5e-3
+  # Motor constant
+  parameter k::ElectricalTorqueConstant = 0.5
+  # Motor inertia
+  parameter J::Inertia = 0.02
+  # Motor friction factor
+  parameter f::RotationalDampingConstant = 0.01
+relations
+  connect(p, R1.p)
+  connect(R1.n, L1.p)
+  connect(L1.n, emf.p)
+  connect(emf.n, n)
+  connect(emf.rotor, inertia.spline_a, friction.spline_a)
+  connect(friction.spline_b, emf.housing, housing)
+  connect(inertia.spline_b, shaft)
+end
+
+component TestDCMotorLoad
+  motor = DCMotor()
+  ground = ElectricalComponents.Ground()
+  source = ElectricalComponents.VoltageSource()
+  fixed = RotationalComponents.Fixed()
+  load = RotationalComponents.TorqueSource()
+  load_source = BlockComponents.Step(height=tau_load, start_time=load_step_start_time)
+  voltage_source = BlockComponents.Constant(k=V_motor)
+  # Motor voltage
+  parameter V_motor::Voltage = 1
+  # Amplitude of load torque step
+  parameter tau_load::Torque = -0.3
+  # Load step start time
+  parameter load_step_start_time::Time = 3
+relations
+  initial motor.L1.i = 0
+  initial motor.inertia.w = 0
+  connect(voltage_source.y, source.v)
+  connect(load_source.y, load.tau)
+  connect(source.p, motor.p)
+  connect(motor.n, source.n, ground.g)
+  connect(motor.shaft, load.spline)
+  connect(motor.housing, load.support, fixed.spline)
+end
+
+analysis DCMotorLoadControlled
+  extends TransientAnalysis(stop=6, abstol=1m, reltol=1m)
+  model = TestDCMotorLoadControlled(k=k, Ti=Ti, Td=Td, Nd=Nd)
+  # Controller gain
+  parameter k::Real = 0.5
+  # Controller time constant of the integrator block
+  parameter Ti::Time = 0.1
+  # Controller Time constant of the derivative block
+  parameter Td::Time = 1e5
+  parameter Nd::Real = 10
+end
+
+component TestDCMotorLoadControlled
+  motor = DCMotor()
+  ground = ElectricalComponents.Ground()
+  source = ElectricalComponents.VoltageSource()
+  fixed = RotationalComponents.Fixed()
+  load = RotationalComponents.TorqueSource()
+  load_source = BlockComponents.Step(height=tau_load, start_time=load_step_start_time)
+  speed_reference = BlockComponents.Constant(k=w_motor)
+  controller = BlockComponents.LimPID(k=k, Ti=Ti, Td=Td, Nd=Nd, y_max=5, y_min=-5)
+  signal_ff = BlockComponents.Constant(k=0)
+  speed_sensor = RotationalComponents.VelocitySensor()
+  # Motor desired speed
+  parameter w_motor::AngularVelocity = 1
+  # Amplitude of load torque step
+  parameter tau_load::Torque = -0.3
+  # Load step start time
+  parameter load_step_start_time::Time = 3
+  # Controller gain
+  parameter k::Real = 0.5
+  # Controller time constant of the integrator block
+  parameter Ti::Time = 0.1
+  # Controller Time constant of the derivative block
+  parameter Td::Time = 1e5
+  parameter Nd::Real = 10
+relations
+  initial motor.L1.i = 0
+  initial motor.inertia.w = 0
+  u: analysis_point(controller.y, source.V)
+  y: analysis_point(speed_sensor.w, controller.u_m)
+  r: analysis_point(speed_reference.y, controller.u_s)
+  connect(load_source.y, load.tau)
+  connect(source.p, motor.p)
+  connect(motor.n, source.n, ground.g)
+  connect(motor.shaft, load.spline)
+  connect(motor.housing, load.support, fixed.spline)
+  connect(speed_reference.y, controller.u_s)
+  connect(speed_sensor.w, controller.u_m)
+  connect(controller.y, source.V)
+  connect(controller.u_ff, signal_ff.y)
+  connect(speed_sensor.spline, motor.shaft)
+end
+
+analysis DCMotorTuning
+  extends PIDAutotuningAnalysis(
+    measurement = "y",
+    control_input = "u",
+    Ts = 0.001,
+    duration = 0.1,
+    Ms = 1.2,
+    Mt = 1.2,
+    Mks = 400,
+    wl = 1,
+    wu = 1e4,
+    tol = 1e-8
+  )
+  model = TestDCMotorLoadControlled()
+end
+
+analysis DCMotorClosedLoopAnalysis
+  extends ClosedLoopAnalysis(
+    measurement = ["y"],
+    control_input = ["u"],
+    wl = 1,
+    wu = 1e4,
+    num_frequencies = 300,
+    pos_feedback = true,
+    duration = 2.0
+  )
+  model = TestDCMotorLoadControlled()
+end
+
+
+analysis DCMotorClosedLoopSensitivityAnalysis
+  extends ClosedLoopSensitivityAnalysis(
+    analysis_points = ["y"],
+    wl = 1,
+    wu = 1e4
+  )
+  model = TestDCMotorLoadControlled()
+end
+
+
+analysis DCMotorLinearAnalysis
+  extends LinearAnalysis(
+    outputs = ["y"],
+    inputs = ["r"],
+    duration = 1.0
+  )
+  model = TestDCMotorLoadControlled()
+end

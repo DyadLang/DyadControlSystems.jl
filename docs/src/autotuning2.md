@@ -128,7 +128,7 @@ The optimization problem optimizes performance, subject to robustness constraint
 ```@example iae
 prob4 = AutoTuningProblem2(P; Ms = 1.1, Mt = 1.1, Mks, Ts, Tf) # A very robust and conservative controller with low values of Ms and Mt
 res4 = solve(prob4)
-plot(plot(res1, plot_title="Result 1"), plot(res4, plot_title="Result 4"), size=(800,500), titlefontsize=8, labelfontsize=8)
+plot(plot(res1, plot_title="Result 1"), plot(res4, plot_title="Result 4"), size=(800,500), titlefontsize=6, labelfontsize=8)
 ```
 In this case, the disturbance rejection is slower and the peak disturbance response is higher, but the robustness margins are increased:
 ```@example iae
@@ -141,7 +141,7 @@ Below, we demonstrate the opposite, where we relax the robustness constraints to
 ```@example iae
 prob5 = AutoTuningProblem2(P; Ms = 1.5, Mt = 1.5, Mks, Ts, Tf) # A less robust controller with high values of Ms and Mt
 res5 = solve(prob5)
-plot(plot(res1, plot_title="Result 1"), plot(res5, plot_title="Result 5"), size=(800,500), titlefontsize=8, labelfontsize=8)
+plot(plot(res1, plot_title="Result 1"), plot(res5, plot_title="Result 5"), size=(800,500), titlefontsize=6, labelfontsize=8)
 ```
 In this case, the disturbance rejection is faster and the peak disturbance response is lower, but the robustness margins are decreased:
 ```@example iae
@@ -155,7 +155,7 @@ The constraint `Mks` limits the peak amplification of noise from the process out
 ```@example iae
 prob6 = AutoTuningProblem2(P; Ms, Mt, Mks = 1.0, Ts, Tf) # A very conservative controller with low value of Mks
 res6 = solve(prob6)
-plot(plot(res1, plot_title="Result 1"), plot(res6, plot_title="Result 6"), size=(800,500), titlefontsize=8, labelfontsize=8)
+plot(plot(res1, plot_title="Result 1"), plot(res6, plot_title="Result 6"), size=(800,500), titlefontsize=6, labelfontsize=8)
 ```
 In this case, the disturbance rejection is slower and the peak disturbance response is higher, but the noise amplification is limited:
 ```@example iae
@@ -184,7 +184,7 @@ The filter order is chosen by providing the keyword argument `filter_order = 1` 
 ```@example iae
 prob7 = AutoTuningProblem2(P; Ms, Mt, Mks, Ts, Tf, filter_order = 1) # First-order filter
 res7 = solve(prob7)
-plot(plot(res1, plot_title="Result 1"), plot(res7, plot_title="Result 7"), size=(800,500), titlefontsize=8, labelfontsize=8)
+plot(plot(res1, plot_title="Result 1"), plot(res7, plot_title="Result 7"), size=(800,500), titlefontsize=6, labelfontsize=8)
 ```
 Notice how result 1 has high-frequency [roll-off](https://en.wikipedia.org/wiki/Roll-off) in the controller, while result 7 does not, due to having a single filter pole only.
 
@@ -195,7 +195,7 @@ ub = [Inf, Inf, Inf, Inf, 2.5] # Upper bounds for the parameters
 lb = [0.0, 0.0, 0.0, 0.0, 0.7] # Lower bounds for the parameters
 prob8 = AutoTuningProblem2(P; Ms, Mt, Mks, Ts, Tf, filter_order = 2, optimize_d = true, ub, lb) # Second-order filter with optimized damping
 res8 = solve(prob8)
-plot(plot(res1, plot_title="Result 1"), plot(res8, plot_title="Result 8"), size=(800,500), titlefontsize=8, labelfontsize=8)
+plot(plot(res1, plot_title="Result 1"), plot(res8, plot_title="Result 8"), size=(800,500), titlefontsize=6, labelfontsize=8)
 ```
 The result in this case is very similar to the first result, you may notice a _slightly_ wider high-frequency peak in the controller transfer function in the latter result. Here, we provided custom parameter bounds to allow the damping parameter to vary between 0.7 and 2.5., the default bounds if none is provided are $1/\sqrt(2) \leq d \leq 1$. A damping ratio above 1 leads to an over-damped filter, where one of the poles go towards infinity, allowing the controller high-frequency peak to become wider.
 
@@ -257,17 +257,23 @@ step_output = [:y, :du]
 measurement = :y
 ref = [0.0, 0.0] # Since we have more than one output, we must specify the reference for both
 prob9 = AutoTuningProblem2(Pud; prob1.w, Ms, Mt, Mks, Ts, Tf, step_output, measurement, ref)
+solve(prob9) # hide
 res9 = solve(prob9)
-plot(plot(res1, plot_title="Result 1"), plot(res9, plot_title="Result 9"), size=(800,500), titlefontsize=8, labelfontsize=8)
+plot(plot(res1, plot_title="Result 1"), plot(res9, plot_title="Result 9"), size=(800,500), titlefontsize=6, labelfontsize=8)
 ```
 The step-response plot now shows both the measured output and the high-pass filtered control signal, the sum of which are minimized. Notice also how the transfer function $KS$ is significantly smaller than its constraint allows due to the control-signal penalty. We may compare the weighted $\mathcal{H}_2$ norm of the controller noise amplification in result 1 and 9
 ```@example iae
-(
-    norm(high_pass_filter*res1.G[:u_controller_output_C, :reference_input]), # The measurement noise enters at the same place as the reference
-    norm(high_pass_filter*res9.G[:u_controller_output_C, :reference_input])
-)
+n1 = norm(high_pass_filter*res1.G[:u_controller_output_C, :reference_input]) # The measurement noise enters at the same place as the reference
+n9 = norm(high_pass_filter*res9.G[:u_controller_output_C, :reference_input])
+(n1, n9)
 ```
-where the latter should be smaller. We can also simulate the response to measurement noise:
+where the latter should be smaller.
+```@example iae
+using Test
+@test n9 < n1
+```
+
+We can also simulate the response to measurement noise:
 ```@example iae
 plot(lsim(res1.G[:u_controller_output_C, :reference_input], noisy_measurements, timevec, method=:zoh), label="Result 1")
 plot!(lsim(res9.G[:u_controller_output_C, :reference_input], noisy_measurements, timevec, method=:zoh), label="Result 9", title="Control-signal response to measurement noise")

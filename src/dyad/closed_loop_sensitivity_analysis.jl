@@ -38,23 +38,56 @@ struct ClosedLoopSensitivityAnalysisSolution{SP <: ClosedLoopSensitivityAnalysis
     S
 end
 
+function Base.show(io::IO, m::MIME"text/plain", sol::ClosedLoopSensitivityAnalysisSolution)
+    spec = sol.spec
+    S = sol.S
+    n_analysis_points = length(spec.analysis_points)
+    Ms, wMs = hinfnorm2(S)
+    ϕ_m = rad2deg(2 * asin(1 / (2 * Ms)))
+    g_m = Ms / (Ms - 1)
+    println(io, "ClosedLoopSensitivityAnalysisSolution")
+    println(io, "Analysis points: $(spec.analysis_points)")
+    println(io, "Loop openings: $(spec.loop_openings)")
+    println(io, "Frequency bounds: [$(spec.wl), $(spec.wu)]")
+    println(io, "H∞ norm ||S(s)||: $(few(Ms))")
+    println(io, "Phase margin (disk based): $(few(ϕ_m))°")
+    println(io, "Gain margin (disk based): $(few(g_m))")
+    return nothing
+end
+
 function DyadInterface.run_analysis(spec::ClosedLoopSensitivityAnalysisSpec)
     analysis_points = Symbol.(spec.analysis_points)
     loop_openings = Symbol.(spec.loop_openings)
     # Compute the sensitivity function for the given analysis points (vector of points, but single S)
-    S = get_named_sensitivity(spec.model, analysis_points; loop_openings)
+    S = get_named_sensitivity(spec.model, analysis_points; loop_openings, warn_empty_op=false)
     stripped_spec = @set spec.model = nothing
     ClosedLoopSensitivityAnalysisSolution(stripped_spec, S)
 end
 
-function DyadInterface.AnalysisSolutionMetadata(::ClosedLoopSensitivityAnalysisSpec)
-    plt_names = [:BodePlot]
-    plt_types = [CannedVisualizationType.PlotlyPlot]
-    plt_titles = ["Sensitivity Plot"]
-    plt_descriptions = ["Bode plot (single analysis point) or sigmaplot (multiple analysis points) of the closed-loop sensitivity function S."]
+function DyadInterface.AnalysisSolutionMetadata(spec::ClosedLoopSensitivityAnalysisSpec)
+    plt_names = [
+        :BodePlot
+        :NyquistPlot
+        :MarginPlot
+    ]
+    plt_types = fill(CannedVisualizationType.PlotlyPlot, 3)
+    plt_titles = [
+        "Sensitivity function \$S(s)\$"
+        "Nyquist plot of \$L(s)"
+        "Margin plot of \$L(s)\$"
+    ]
+    plt_descriptions = [
+        "Bode plot (single analysis point) or sigmaplot (multiple analysis points) of the closed-loop sensitivity function S."
+        "Nyquist plot of the loop-transfer function"
+        "Margin plot of the loop-transfer function"
+    ]
     cannedresults = DyadInterface.ArtifactMetadata.(
         plt_names, plt_types, plt_titles, plt_descriptions
     )
+    if length(spec.analysis_points) > 1
+        cannedresults = cannedresults[1:1] # For MIMO analysis we only support the bode/sigmaplot
+    end
+
     allowed_symbols = []
     AnalysisSolutionMetadata(cannedresults, allowed_symbols)
 end
@@ -93,6 +126,12 @@ function DyadInterface.artifacts(sol::ClosedLoopSensitivityAnalysisSolution, nam
             plt = sigmaplot(S, w; title="Sensitivity Function singular values \$S(s)\$", legend=:bottomright, lab)
             return plt
         end
+    elseif name === :NyquistPlot
+        L = inv(S) - I(S.ny)
+        return nyquistplot(L.sys, w, Ms_circles=Ms)
+    elseif name === :MarginPlot
+        L = inv(S) - I(S.ny)
+        marginplot(L.sys, w)
     else
         error("Unknown artifact name: $name")
     end

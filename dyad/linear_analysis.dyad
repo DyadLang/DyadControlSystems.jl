@@ -1,0 +1,17 @@
+partial analysis LinearAnalysis
+    extends Analysis
+    model::Dyad.EmptyComponent = Dyad.EmptyComponent()
+    # Names of the input variables for the analysis
+    parameter inputs::String[1]
+    # Names of the output variables for the analysis
+    parameter outputs::String[1]
+    # The lower frequency bound for Bode plot (set to -1 for automatic selection)
+    parameter wl::Real = -1
+    # The upper frequency bound for Bode plot (set to -1 for automatic selection)
+    parameter wu::Real = -1
+    # Number of frequency points for Bode plot
+    parameter num_frequencies::Integer = 3000
+    # Duration for the step response plot (set to -1 for automatic selection)
+    parameter duration::Real = -1
+    parameter loop_openings::String[nw] = []
+end

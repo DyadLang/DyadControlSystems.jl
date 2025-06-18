@@ -17,7 +17,7 @@ function print_phase_analysis(dm)
 	)
 
 	heatmap(bg; c=cg, yaxis=false, xticks,
-	size=(500, 100), colorbar=false, title="Phase margin [degrees]")
+	size=(500, 100), colorbar=false, title="Phase margin [°]")
 	vline!([rescaled], l=(:black, 3), primary=false)
 end
 
@@ -175,7 +175,9 @@ function analyze_robustness(P, C=nothing; pos_feedback=false, Tf = nothing)
 
     plot_gof = gangoffourplot(P, C, xlabel="", label="")
     plot_dm = plot(dm)
-    plots = [plot_gof, plot_indicators, plot_dm, plot_time]
+	plot_nyquist = nyquistplot(L, lab="\$L_o(s)\$")
+	plot_marg = marginplot(L, lab="\$L_o(s)\$")
+    plots = [plot_gof, plot_indicators, plot_dm, plot_time, plot_nyquist, plot_marg]
 
     plot(plots..., layout=length(plots)) # layout=(2,2), size=(1200, 1000))
 

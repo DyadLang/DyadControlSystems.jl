@@ -44,6 +44,8 @@ export AbstractPIDAutotuningAnalysisSpec, PIDAutotuningAnalysisSpec
     wl::WL
     wu::WU
     num_frequencies::Int64
+    tol::Float64 = 1e-6
+    verbose::Bool = true
 end
 
 Base.nameof(spec::PIDAutotuningAnalysisSpec) = spec.name
@@ -71,6 +73,11 @@ function Base.show(io::IO, m::MIME"text/plain", spec::PIDAutotuningAnalysisSpec)
     println(io, "optimize_d: ", spec.optimize_d)
     println(io, "w: ", [spec.wl, spec.wu])
     println(io, "num_frequencies: ", spec.num_frequencies)
+    println(io, "tol: ", spec.tol)
+
+    g_m, ϕ_m, ϕ_m_deg = margin_bounds(spec.Ms)
+    println(io, "gain margin lower bound: ", few(g_m))
+    println(io, "phase margin lower bound: ", few(ϕ_m_deg), "°")
 end
 
 function setup_prob(spec::PIDAutotuningAnalysisSpec)
@@ -106,7 +113,7 @@ function setup_prob(spec::PIDAutotuningAnalysisSpec)
     ] |> unique
 
     # We break any existing feedback from the plant output with loop_openings = [measurement]
-    P = named_ss(spec.model, inputs, outputs, loop_openings = [measurement])
+    P = named_ss(spec.model, inputs, outputs, loop_openings = [measurement], warn_empty_op = false)
 
     if spec.wl < 0 || spec.wu < 0
         w = ControlSystemsBase._default_freq_vector(P, Val{:bode}())
@@ -126,15 +133,34 @@ struct PIDAutotuningAnalysisSolution{SP <: PIDAutotuningAnalysisSpec, S} <: Abst
     sol::S
 end
 
+function Base.show(io::IO, m::MIME"text/plain", sol::PIDAutotuningAnalysisSolution)
+    print(io, "PID Autotuning Analysis solution for ")
+    printstyled(io, "$(nameof(sol.spec))\n", color = :green, bold = true)
+    println(io, "Optimized parameters (parallel form): ", sol.sol.p)
+    println(io, "Cost: ", sol.sol.cost)
+
+    prob = sol.sol.prob
+    P = prob.P
+    Pfb = P[prob.measurement, prob.control_input]
+    K = sol.sol.K
+    dm = diskmargin(balance_statespace(Pfb*K)[1])
+    delaymarg = π/180 * dm.ϕm / dm.ω0
+    println(io, "\nDisk-based margins:")
+    println(io, "\tGain margins: ", few(dm.gainmargin[1]), ", ", few(dm.gainmargin[2]))
+    println(io, "\tPhase margin: ", few(dm.phasemargin), "°")
+    println(io, "\tDelay margin: ", delaymarg, "s")
+end
+
 function DyadInterface.run_analysis(spec::PIDAutotuningAnalysisSpec)
     prob = setup_prob(spec)
 
     p0 = [spec.kp_guess, spec.ki_guess, spec.kd_guess, spec.Tf_guess]
-    if all(<(0), p0)
+    if any(<(0), p0)
         p0 = initial_guess(prob)
         @debug "Initial guess:" p0
     end
-    sol = solve(prob, p0, solver=IpoptSolver(verbose = true, tol=1e-6, acceptable_tol=1e-6, acceptable_constr_viol_tol=0.1, constr_viol_tol=0.01, printerval=5))
+    (; tol, verbose) = spec
+    sol = solve(prob, p0, solver=IpoptSolver(; exact_hessian=false, mu_strategy="adaptive", verbose, tol, acceptable_tol=10tol, acceptable_constr_viol_tol=0.1, constr_viol_tol=0.01, printerval=5, max_cpu_time = 2000000.0))
 
     stripped_spec = @set spec.model = nothing
     PIDAutotuningAnalysisSolution(stripped_spec, sol)
@@ -146,9 +172,11 @@ function DyadInterface.AnalysisSolutionMetadata(sol::PIDAutotuningAnalysisSoluti
         :SensitivityFunctions
         :NoiseSensitivityAndController
         :OptimizedResponse
+        :ControlSignalResponse
         :NyquistPlot
     ]
     plt_types = [
+        ArtifactType.PlotlyPlot
         ArtifactType.PlotlyPlot
         ArtifactType.PlotlyPlot
         ArtifactType.PlotlyPlot
@@ -158,12 +186,14 @@ function DyadInterface.AnalysisSolutionMetadata(sol::PIDAutotuningAnalysisSoluti
         "Sensitivity functions"
         "Noise sensitivity and controller (KS / K)"
         "Optimized response"
+        "Control signal response"
         "Nyquist plot"
     ]
     plt_descriptions = [
         "Sensitivity functions"
         "Noise sensitivity and controller (KS / K)"
-        "Optimized response"
+        "Optimized output response to the step input"
+        "The response of the control signal to the step input"
         "Nyquist plot of loop-transfer function"
     ]
 
@@ -205,9 +235,14 @@ function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbo
     tv = 0:Ts:Tf
 
     Pfb = P[prob.measurement, prob.control_input]
+    Pus = res.G[:u_controller_output_C, prob.step_input]
 
     function sim()
         Gd = c2d(res.G[prob.step_output, prob.step_input], Ts, disc)   # Discretize the system
+        prob.response_type(Gd.sys, tv) # Simulate the step response
+    end
+    function sim_u()
+        Gd = c2d(Pus, Ts, disc)   # Discretize the system
         prob.response_type(Gd.sys, tv) # Simulate the step response
     end
 
@@ -227,6 +262,12 @@ function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbo
         for i in eachindex(vcat(prob.step_input)), j in eachindex(vcat(prob.step_output))
             step1 = sim() |> deepcopy # Deepcopy due to dstep using cached workspaces
             plot!(step1.t, step1.y[j,:,i], label="$(vcat(prob.step_input)[i]) → $(vcat(prob.step_output)[j])")
+        end
+    elseif name === :ControlSignalResponse
+        fig = plot()
+        for i in eachindex(vcat(prob.step_input))
+            step2 = sim_u() |> deepcopy # Deepcopy due to dstep using cached workspaces
+            plot!(step2.t, step2.y[i,:], label="$(vcat(prob.step_input)[i]) → u")
         end
     elseif name === :NyquistPlot
         fig = nyquistplot(Pfb*C, plot_w, label="PK")
@@ -249,6 +290,7 @@ function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbo
         scatter!(fig, [-1], [0], markershape=:xcross, seriescolor=:red, markersize=5, seriesstyle=:scatter, xguide="Re", yguide="Im", framestyle=:zerolines, title="Nyquist plot", xlims=(-3, 1), ylims=(-3, 1), label="")
     elseif name == :OptimizedParameters
         Kp_standard, Ti_standard, Td_standard = convert_pidparams_to_standard(res.p[1:3]..., :parallel)
+        Tf = res.p[4]
         parameters = [
             :kp_parallel => res.p[1]
             :ki_parallel => res.p[2]
@@ -256,11 +298,13 @@ function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbo
             :Kp_standard => Kp_standard
             :Ti_standard => Ti_standard
             :Td_standard => Td_standard
-            :Tf => res.p[4]
+            :Tf => Tf
         ]
-
+        
         if sol.spec.optimize_d
             push!(parameters, :d => res.p[5])
+        elseif sol.spec.filter_order == 1
+            push!(parameters, :Nd => Td_standard / Tf)
         end
 
         return DataFrame(parameters...)
