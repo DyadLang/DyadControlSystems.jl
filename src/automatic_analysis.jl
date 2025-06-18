@@ -147,7 +147,7 @@ function analyze_robustness(P, C=nothing; pos_feedback=false, Tf = nothing)
         end
         plot_time = if pos_feedback
 			un = gof.u
-			gof = gof*diagm([-1, 1]) # To get correct signs in plot
+			gof = gof*diagm([-1*ones(P.ny); ones(P.nu)]) # To get correct signs in plot
 			gof.u .= un # To not change the original signal names
             plot(step(gof, Tf)) 
         else

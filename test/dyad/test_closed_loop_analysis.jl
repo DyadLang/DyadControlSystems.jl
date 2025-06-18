@@ -42,7 +42,7 @@ connect = ModelingToolkit.connect
         connect(load_step.output, load.tau)
         connect(ref.output, :r, feedback.input1)
         connect(speed_sensor.w, :y, feedback.input2)
-        connect(feedback.output, pi_controller.err_input)
+        connect(feedback.output, :e, pi_controller.err_input)
         connect(pi_controller.ctr_output, :u, source.V)
         connect(source.p, R1.p)
         connect(R1.n, L1.p)
@@ -62,13 +62,13 @@ using DyadControlSystems
 import DyadControlSystems as JSC
 
 # Verify that the model linearizes
-lsys = named_ss(model, inputs, outputs; op, loop_openings=[:y])
+lsys = named_ss(model, inputs, outputs; op, loop_openings=[:u])
 
 spec = JSC.ClosedLoopAnalysisSpec(;
     name = :DCMotorAnalysis,
     model,
-    measurement = "y",
-    control_input = "u",
+    measurement = ["y"],
+    control_input = ["u"],
     duration = 0.25,
 )
 
@@ -124,19 +124,62 @@ end
 @named model = DCMotorWithoutController()
 
 # Verify that the model linearizes
-lsys = named_ss(model, inputs, outputs; op, loop_openings=[:y])
+lsys = named_ss(model, inputs, outputs; op, loop_openings=[:u])
 
 
 spec = JSC.ClosedLoopAnalysisSpec(;
     name = :DCMotorWithoutControllerAnalysis,
     model,
-    measurement = "y",
-    control_input = "u",
+    measurement = ["y"],
+    control_input = ["u"],
     duration = 0.25,
 )
 
 
 asol = JSC.run_analysis(spec)
 
+Splot = JSC.artifacts(asol, :all)
+
+
+
+## MIMO
+sys_inner             = DyadControlSystems.ControlDemoSystems.dcmotor(ref=nothing)
+@named ref            = Blocks.Step(height = 1, start_time = 0)
+@named ref_diff       = Blocks.Derivative(T=0.1) # This will differentiate q_ref to q̇_ref
+@named add            = Blocks.Add()      # The middle ∑ block in the diagram
+@named p_controller   = Blocks.Gain(10.0) # Kₚ
+@named outer_feedback = Blocks.Feedback() # The leftmost ∑ block in the diagram
+@named id             = Blocks.Gain(1.0)  # a trivial identity element to allow us to place the analysis point :r in the right spot
+
+connect = ModelingToolkit.connect
+connections = [
+    connect(ref.output, :r, id.input)                               # We now place analysis point :r here
+    connect(id.output, outer_feedback.input1, ref_diff.input)
+    connect(ref_diff.output, add.input1)
+    connect(add.output, sys_inner.feedback.input1)
+    connect(p_controller.output, :up, add.input2)                   # Analysis point :up
+    connect(sys_inner.angle_sensor.phi, :yp, outer_feedback.input2) # Analysis point :yp
+    connect(outer_feedback.output, :ep, p_controller.input)         # Analysis point :ep
+]
+
+@named closed_loop = ODESystem(connections, ModelingToolkit.get_iv(sys_inner); systems = [sys_inner, ref, id, ref_diff, add, p_controller, outer_feedback])
+
+# ssys = structural_simplify(closed_loop)
+# prob = ODEProblem(ssys, [], (0,10))
+# sol = solve(prob)
+# plot(sol, layout=5)
+
+spec = JSC.ClosedLoopAnalysisSpec(;
+    name = :MIMODCMotorAnalysis,
+    model = closed_loop,
+    # measurement = ["dcmotor.y"],
+    # control_input = ["dcmotor.u"],
+    measurement = ["yp", "dcmotor.y"],
+    control_input = ["up", "dcmotor.u"],
+    duration = 1.0,
+)
+
+
+asol = JSC.run_analysis(spec)
 Splot = JSC.artifacts(asol, :all)
 

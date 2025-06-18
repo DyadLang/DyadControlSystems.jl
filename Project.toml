@@ -1,7 +1,7 @@
 name = "DyadControlSystems"
 uuid = "6f9e59d0-2838-4fee-9bce-c163a6c9592b"
 authors = ["Fredrik Bagge Carlson"]
-version = "1.1.0"
+version = "1.1.1"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -110,7 +110,7 @@ LinearAlgebra = "1.6"
 LowLevelParticleFilters = "3.9.1"
 Markdown = "1.6"
 MathOptInterface = "1.7"
-ModelingToolkit = "9.16 - 9.79"
+ModelingToolkit = "9.16 - 9.79, 9.80.4"
 ModelingToolkitStandardLibrary = "2.3.1"
 MonteCarloMeasurements = "1.1"
 OSQP = "0.7, 0.8"

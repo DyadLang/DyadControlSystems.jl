@@ -31,13 +31,14 @@ The analysis requires specification of analysis points in the model, correspondi
 # Arguments:
 - `name::Symbol`: The name of the analysis specification.
 - `model::M`: The model to be analyzed.
-- `measurement::String`: The name of the analysis point located where the plant measurement that is fed back to the controller is located.
-- `control_input::String`: The name of the analysis point located where the controller output is fed to the plant.
+- `measurement::Vector{String}`: The name of the analysis point or points located where the plant measurement that is fed back to the controller is located.
+- `control_input::Vector{String}`: The name of the analysis point or points located where the controller output is fed to the plant.
 - `wl::WL`: The lower frequency bound for the analysis. Set to -1 for automatic selection.
 - `wu::WU`: The upper frequency bound for the analysis. Set to -1 for automatic selection.
 - `num_frequencies::Int64`: The number of frequencies to be used in the analysis.
 - `pos_feedback::Bool`: Whether the feedback is positive in the analysis. Default is true since a negative feedback is commonly already built into the model.
 - `duration::Float64`: The duration of the step-response experiment in the analysis. Default is -1 for automatic selection.
+- `loop_openings::Vector{String}`: Names of loop openings to break feedback if present. Default is an empty vector. 
 
 # Result visualization
 The analysis artifact displays
@@ -49,22 +50,33 @@ The analysis artifact displays
     - ``u -> y``: The plant output response to a unit step input disturbance
     - ``y -> u``: The control-signal response to a unit reference step
     - ``y -> y``: The plant output response to a unit reference step
+
+# Details
+In order to isolate plant from controller, the connection from the controller to the plant is always broken in this analysis. This means that it can be hard to analyze the sensitivity of cascaded control systems, where the output of one controller is the input to another. 
+
+When MIMO systems are analyzed, some sensitivity functions are drawn as Sigma plots rather than Bode plots. The diskmargin is in this case computed for the output loop-transfer function ``L = PC``, that is, the margin for simultaneous output-perturbations is analyzed. This is generally a conservative analysis. See [`loop_diskmargin`](@ref) for single-loop margins.
 """
 @kwdef struct ClosedLoopAnalysisSpec{M,WL,WU} <:
         AbstractClosedLoopAnalysisSpec
     name::Symbol
     model::M
-    measurement::String
-    control_input::String
+    measurement::Vector{String}
+    control_input::Vector{String}
     wl::WL = -1
     wu::WU = -1
     num_frequencies::Int64 = 300
     pos_feedback::Bool = true # Default to true for MTK models since the negative gain is usually built into the model
     duration::Float64 = -1.0
+    loop_openings::Vector{String} = String[] 
 end
 
 
 Base.nameof(spec::ClosedLoopAnalysisSpec) = spec.name
+
+function sysiszero(sys::AbstractStateSpace)
+    iszero(sys.D) || return false
+    iszero(sys.C) || iszero(sys.B)
+end
 
 # TODO: Fix this up with the new fields
 function Base.show(io::IO, m::MIME"text/plain", spec::ClosedLoopAnalysisSpec)
@@ -83,20 +95,15 @@ function setup_prob(spec::ClosedLoopAnalysisSpec)
     # TODO: Add value validation
 
     # convert argument types
-    measurement = Symbol(spec.measurement)
-    control_input = Symbol(spec.control_input)
+    outputs = Symbol.(spec.measurement)
+    inputs = Symbol.(spec.control_input)
+
 
     # linearize
-    inputs = [
-        control_input;
-    ]
-    outputs = [
-        measurement;
-    ]
-
     # We break any existing feedback from the plant output with loop_openings = [measurement]
-    P = named_ss(spec.model, inputs, outputs, loop_openings = [measurement])
-    C = named_ss(spec.model, outputs, inputs, loop_openings = [control_input])
+    loop_openings = unique([spec.loop_openings; inputs])
+    P = named_ss(spec.model, inputs, outputs; loop_openings)
+    C = named_ss(spec.model, outputs, inputs; loop_openings)
 
     if spec.wl < 0 || spec.wu < 0
         w = ControlSystemsBase._default_freq_vector(P, Val{:bode}())
@@ -108,13 +115,13 @@ function setup_prob(spec::ClosedLoopAnalysisSpec)
     end
     P = sminreal(P)
     C = sminreal(C)
-    if C.sys == ss(0)
-        @info "Linearized controller is zero. Performing analysis with unit feedback. If this is unintended, check the model for saturation or other similar nonlinearities such as use of functions `max, min, clamp` that might yield a zero linearizaiton at the specified operating point."
+    if sysiszero(C)
+        @info "Linearized controller is zero. Performing analysis with unit feedback. If this is unintended, check the model for saturation or other similar nonlinearities such as use of functions `max, min, clamp` that might yield a zero linearization at the specified operating point."
         # C = nothing 
         C = ss(-I(P.ny))
     end
-    if P.sys == ss(0)
-        error("Linearized plant model is zero. This may be caused by a missing connection or the linearizaiton at the specified operating point is zero. Check the model for saturation or other similar nonlinearities such as use of functions `max, min, clamp`.")
+    if sysiszero(P)
+        error("Linearized plant model is zero. This may be caused by a missing connection or the linearization at the specified operating point is zero. Check the model for saturation or other similar nonlinearities such as use of functions `max, min, clamp`.")
     end
 
     sminreal(P), C

@@ -389,9 +389,9 @@ function AutoTuningProblem2(P::DelayLtiSystem; kwargs...)
     AutoTuningProblem2(pade(P, 3); kwargs...)
 end
 
-function Optimization.solve(prob::AutoTuningProblem2, params = initial_guess(prob), solver = IpoptSolver(exact_hessian=false); kwargs...)
+function Optimization.solve(prob::AutoTuningProblem2, params = initial_guess(prob), solver = IpoptSolver(exact_hessian=false, mu_strategy="adaptive"); kwargs...)
     (:lb ∈ keys(kwargs) || :ub ∈ keys(kwargs)) && @warn("Overriding the parameter bounds when calling solve is strongly discouraged, it bypasses validation and can lead to incorrect results. Create the AutoTuningProblem2 with the desired bounds instead.")
-    C, G, sol, timeres = autotune(
+    C, G, sol, timeres, costscaling = autotune(
         prob.P;
         prob.w,
         prob.measurement,
@@ -417,7 +417,7 @@ function Optimization.solve(prob::AutoTuningProblem2, params = initial_guess(pro
         solver,
         kwargs...
     )
-    AutoTuningResult2(prob, sol.u, C, sol, sol.minimum, timeres, G)
+    AutoTuningResult2(prob, sol.u, C, sol, sol.minimum/costscaling, timeres, G)
 end
 
 """
@@ -476,6 +476,7 @@ function autotune(
     params,
     autodiff = Optimization.AutoForwardDiff(),
     solver = IpoptSolver(),
+    scale = true,
     kwargs...
     # ucons,
     # lcons,
@@ -490,8 +491,15 @@ function autotune(
         error("Expected 4 parameters [kp, ki, kd, Tf], but got $(length(params))")
     end
     # The costscaling factor below is a heuristic numerical scaling. If a large gain is required it typically means that the plant gain is low, and the integral of the cost will thus be a small number.
-    np = 1.0#params[1]#norm(params)
-    costscaling = np == 0 ? one(np) : np
+    scaling_input = if step_input === :reference_input || (step_input isa AbstractArray && :reference_input ∈ step_input)
+        control_input
+    else
+        step_input
+    end
+    scaling_output = (step_output isa AbstractArray && length(step_output) > 1) ? measurement : step_output
+
+    # @show scaling_input, scaling_output
+    costscaling = scale ? 1/exp(mean(log.(abs.(freqrespv(P[scaling_output, scaling_input], w))))) : 1.0
 
     tvec = 0:Ts:Tf
 
@@ -595,14 +603,17 @@ function autotune(
 
     # Build ucons
     ucons = zeros(n_con_outputs, length(w))
+    ind = 1
     if any(isfinite, Ms)
-        ucons[1, :] .= Ms
+        ucons[ind, :] .= Ms
+        ind += 1
     end
     if any(isfinite, Mt)
-        ucons[2, :] .= Mt
+        ucons[ind, :] .= Mt
+        ind += 1
     end
     if any(isfinite, Mks)
-        ucons[3, :] .= Mks
+        ucons[ind, :] .= Mks
     end
     ucons = [vec(ucons); 0] # One extra zero for the filter breakdown constraint
     lcons = [fill(-Inf, n_con_outputs*length(w)); -Inf]
@@ -623,7 +634,7 @@ function autotune(
     # isstable(G) || @error("The closed-loop system is not stable")
 
     # AutoTuningResult2(prob, sol.u, C, sol, sol.minimum, timeres, G)
-    C, G, sol, timeres
+    C, G, sol, timeres, costscaling
 end
 
 """

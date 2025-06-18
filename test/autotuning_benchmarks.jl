@@ -183,7 +183,7 @@ function problem_8(method=3)
     w = exp10.(LinRange(-1, 3, 300))
 
 
-    params = [0.0010000000000000007, 0.00020000000000000015, 0.020000000000000014, 0.001]
+    # params = [0.0010000000000000007, 0.00020000000000000015, 0.020000000000000014, 0.001]
 
     measurement = P.y[1]
     control_input = :force
@@ -230,7 +230,7 @@ function problem_8(method=3)
         # autodiff = Optimization.AutoFiniteDiff(),
         reduce = true,
     )
-    prob, params
+    prob, 0.01DyadControlSystems.initial_guess(prob)# params
 end
 
 function problem_9()
@@ -258,7 +258,7 @@ function problem_9()
         Ms = 1.2,
         Mt = 1.1,
         Mks = 3e4,
-        lb = [0.0, 2000, 0, 0],
+        # lb = [0.0, 2000, 0, 0],
     )
     p0 = [100, 2000, 200, 0.01] # DyadControlSystems.initial_guess(prob)
     prob, p0
@@ -278,6 +278,7 @@ function run_benchmarks()
             acceptable_tol  = 1e-3,
             constr_viol_tol = 1e-3,
             acceptable_constr_viol_tol = 2e-2,
+            max_cpu_time = 2000000.0
         )
     ]
 
@@ -301,7 +302,7 @@ function run_benchmarks()
         @show problem
         prob, p0 = problem()
         # @show p0 = initial_guess(prob)
-        res = solve(prob, p0, alg; maxtime=10.0)
+        res = solve(prob, p0, alg)
     end
 
     stringtype(x) = string(typeof(x))
