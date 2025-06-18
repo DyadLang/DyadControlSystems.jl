@@ -94,6 +94,8 @@ include("trajectory_optimizer.jl")
 export pqr, build_K_function, predicted_cost, poly_approx, safe_lqr
 include("pqr.jl")
 
+export analyze_robustness
+include("automatic_analysis.jl")
 include("dyad/dyad.jl")
 
 end

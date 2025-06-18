@@ -19,7 +19,23 @@ end
             @info "Testing pid analysis"
             include("dyad/test_pid_analysis.jl")
         end
+
+        @testset "closed_loop_analysis" begin
+            @info "Testing closed_loop_analysis"
+            include("dyad/test_closed_loop_analysis.jl")
+        end
+
+        @testset "linear_analysis" begin
+            @info "Testing linear_analysis"
+            include("dyad/test_linear_analysis.jl")
+        end
     end
+
+    @testset "automatic_analysis" begin
+        @info "Testing automatic_analysis"
+        include("test_analyze_robustness.jl")
+    end
+
     @testset "inverse_lqr" begin
         @info "Testing inverse_lqr"
         include("test_inverse_lqr.jl")

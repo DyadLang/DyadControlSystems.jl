@@ -46,9 +46,6 @@ export AbstractPIDAutotuningAnalysisSpec, PIDAutotuningAnalysisSpec
     num_frequencies::Int64
 end
 
-"json_inf(x) = x >= 1e300 ? Inf : x"
-json_inf(x) = x >= 1e300 ? Inf : x
-
 Base.nameof(spec::PIDAutotuningAnalysisSpec) = spec.name
 
 # TODO: Fix this up with the new fields
@@ -73,10 +70,10 @@ function Base.show(io::IO, m::MIME"text/plain", spec::PIDAutotuningAnalysisSpec)
     println(io, "filter_order: ", spec.filter_order)
     println(io, "optimize_d: ", spec.optimize_d)
     println(io, "w: ", [spec.wl, spec.wu])
-    println(io, "num_frequencies: ", num_frequencies)
+    println(io, "num_frequencies: ", spec.num_frequencies)
 end
 
-function setup_prob(spec)
+function setup_prob(spec::PIDAutotuningAnalysisSpec)
     # TODO: Add value validation
 
     # convert argument types
@@ -200,7 +197,7 @@ end
 # TODO: Parameters for canned artifacts, e.g. to configure plots
 # returns the canned artifact of name `name`. The allowed `artifact`s are
 # defined by the `AnalysisSolutionMetadata` provided by `get_metadata`.
-function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbol)
+function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbol; adaptive=true)
     res = sol.sol
     prob = res.prob
     (; Ts, Tf, disc, Ms, Mt, w, P) = prob
@@ -216,12 +213,14 @@ function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbo
 
     S, PS, CS, T = ControlSystemsBase.gangoffour(Pfb.sys, C.sys)
 
+    plot_w = adaptive ? exp10.(LinRange(log10(w[1]), log10(w[end]), 4000)) : w
+
     if name === :SensitivityFunctions
-        fig = bodeplot([S, T], w, label = ["S" "T"], plotphase=false)
+        fig = bodeplot([S, T], plot_w, label = ["S" "T"], plotphase=false)
         hline!([prob.Ms], linestyle=:dash, linecolor=1, label="Ms")
         hline!([prob.Mt], linestyle=:dash, linecolor=2, label="Mt")
     elseif name === :NoiseSensitivityAndController
-        fig = bodeplot([CS, C], w, label = ["KS" "K"], plotphase=false)
+        fig = bodeplot([CS, C], plot_w, label = ["KS" "K"], plotphase=false)
         hline!([prob.Mks], linestyle=:dash, linecolor=1, label="Mks")
     elseif name === :OptimizedResponse
         fig = plot()
@@ -230,23 +229,33 @@ function DyadInterface.artifacts(sol::PIDAutotuningAnalysisSolution, name::Symbo
             plot!(step1.t, step1.y[j,:,i], label="$(vcat(prob.step_input)[i]) → $(vcat(prob.step_output)[j])")
         end
     elseif name === :NyquistPlot
-        fig = nyquistplot(Pfb*C, w, label="K")
+        fig = nyquistplot(Pfb*C, plot_w, label="PK")
         cs = -1             # Ms center
         rs = 1 / Ms         # Ms radius
         ct = -Mt^2/(Mt^2-1) # Mt center
         rt = Mt/(Mt^2-1)    # Mt radius
         θ = range(0, stop=2π, length=100)
         Sin, Cos = sin.(θ), cos.(θ)
-        re, im = nyquist(Pfb, w)
+        re, im = nyquistv(Pfb, plot_w)
+
+        indsre = ControlSystemsBase.downsample(plot_w, re, 1/500)[3]
+        indsim = ControlSystemsBase.downsample(plot_w, im, 1/500)[3]
+        inds = sort!(union(indsre, indsim))
+        re,im = re[inds], im[inds]
+
         plot!(fig, vec(re), vec(im), label="P")
         plot!(fig, cs.+rs.*Cos, rs.*Sin, linestyle=:dash, linecolor=1, label="S = $Ms")
         plot!(fig, ct.+rt.*Cos, rt.*Sin, linestyle=:dash, linecolor=2, label="T = $Mt")
         scatter!(fig, [-1], [0], markershape=:xcross, seriescolor=:red, markersize=5, seriesstyle=:scatter, xguide="Re", yguide="Im", framestyle=:zerolines, title="Nyquist plot", xlims=(-3, 1), ylims=(-3, 1), label="")
     elseif name == :OptimizedParameters
+        Kp_standard, Ti_standard, Td_standard = convert_pidparams_to_standard(res.p[1:3]..., :parallel)
         parameters = [
-            :kp => res.p[1]
-            :ki => res.p[2]
-            :kd => res.p[3]
+            :kp_parallel => res.p[1]
+            :ki_parallel => res.p[2]
+            :kd_parallel => res.p[3]
+            :Kp_standard => Kp_standard
+            :Ti_standard => Ti_standard
+            :Td_standard => Td_standard
             :Tf => res.p[4]
         ]
 
